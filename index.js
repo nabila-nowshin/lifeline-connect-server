@@ -58,6 +58,13 @@ async function run() {
       const user = await usersCollection.findOne({ email });
       res.send({ role: user?.role || "user" });
     });
+
+    //get users by email
+    app.get("/users/:email", async (req, res) => {
+      const email = req.params.email;
+      const user = await usersCollection.findOne({ email });
+      res.send(user);
+    });
   } finally {
   }
 }
