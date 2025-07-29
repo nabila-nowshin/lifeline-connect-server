@@ -51,6 +51,13 @@ async function run() {
         res.status(500).send({ error: "Failed to store user" });
       }
     });
+
+    //GET users role
+    app.get("/users/role/:email", async (req, res) => {
+      const email = req.params.email;
+      const user = await usersCollection.findOne({ email });
+      res.send({ role: user?.role || "user" });
+    });
   } finally {
   }
 }
