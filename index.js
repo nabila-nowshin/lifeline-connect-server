@@ -123,6 +123,22 @@ async function run() {
       }
     });
 
+    // Get all donation requests by a specific donor
+    app.get("/donation-requests/:email", async (req, res) => {
+      const email = req.params.email;
+
+      try {
+        const recentRequests = await donationRequestsCollection
+          .find({ requesterEmail: email })
+          .toArray();
+
+        res.json(recentRequests);
+      } catch (error) {
+        console.error("Error fetching recent donation requests:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    });
+
     // Get 3 recent donation requests by a specific donor
     app.get("/donation-requests/recent/:email", async (req, res) => {
       const email = req.params.email;
@@ -137,6 +153,27 @@ async function run() {
         res.json(recentRequests);
       } catch (error) {
         console.error("Error fetching recent donation requests:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    });
+
+    // Get donation requests by a id
+    // Get donation request by ID
+    app.get("/donation-requests/:id", async (req, res) => {
+      const id = req.params.id;
+
+      try {
+        const request = await donationRequestsCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        if (!request) {
+          return res.status(404).json({ error: "Request not found" });
+        }
+
+        res.json(request);
+      } catch (error) {
+        console.error("Error fetching request:", error);
         res.status(500).json({ error: "Internal Server Error" });
       }
     });
