@@ -68,7 +68,7 @@ async function run() {
         if (!user) return res.status(404).send({ message: "User not found" });
         res.send(user);
       } catch (error) {
-        console.error("Error fetching user:", error);
+        //console.error("Error fetching user:", error);
         res.status(500).send({ error: "Failed to fetch user" });
       }
     });
@@ -81,9 +81,6 @@ async function run() {
       if (updatedData._id) {
         delete updatedData._id;
       }
-
-      console.log("Updating user:", email);
-      console.log("With data:", updatedData);
 
       try {
         const result = await usersCollection.updateOne(
@@ -98,6 +95,7 @@ async function run() {
       }
     });
 
+    // DONATION REQUESTS
     app.post("/donation-requests", async (req, res) => {
       try {
         const request = req.body;
@@ -122,6 +120,66 @@ async function run() {
       } catch (error) {
         console.error("Error creating donation request:", error);
         res.status(500).json({ error: "Failed to create donation request." });
+      }
+    });
+
+    // Get 3 recent donation requests by a specific donor
+    app.get("/donation-requests/recent/:email", async (req, res) => {
+      const email = req.params.email;
+
+      try {
+        const recentRequests = await donationRequestsCollection
+          .find({ requesterEmail: email })
+          .sort({ donationDate: -1 }) // newest first
+          .limit(3)
+          .toArray();
+
+        res.json(recentRequests);
+      } catch (error) {
+        console.error("Error fetching recent donation requests:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    });
+
+    // Update donation request by ID (PATCH)
+    app.patch("/donation-requests/:id", async (req, res) => {
+      const { id } = req.params;
+      const updatedData = req.body; // recipientName, donationDate, donationTime, bloodGroup
+
+      try {
+        const result = await donationRequestsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: updatedData }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).json({ message: "Request not found" });
+        }
+
+        res.json({ modifiedCount: result.modifiedCount });
+      } catch (error) {
+        console.error("Update error:", error);
+        res.status(500).json({ error: "Failed to update donation request" });
+      }
+    });
+
+    // Delete donation request by ID (DELETE)
+    app.delete("/donation-requests/:id", async (req, res) => {
+      const { id } = req.params;
+
+      try {
+        const result = await donationRequestsCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+
+        if (result.deletedCount === 0) {
+          return res.status(404).json({ message: "Request not found" });
+        }
+
+        res.json({ deletedCount: result.deletedCount });
+      } catch (error) {
+        console.error("Delete error:", error);
+        res.status(500).json({ error: "Failed to delete donation request" });
       }
     });
   } finally {
