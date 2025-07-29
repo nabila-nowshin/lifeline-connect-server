@@ -61,9 +61,28 @@ async function run() {
 
     //get users by email
     app.get("/users/:email", async (req, res) => {
+      try {
+        const email = req.params.email;
+        const user = await usersCollection.findOne({ email });
+        if (!user) return res.status(404).send({ message: "User not found" });
+        res.send(user);
+      } catch (error) {
+        console.error("Error fetching user:", error);
+        res.status(500).send({ error: "Failed to fetch user" });
+      }
+    });
+
+    //patch operation on Users info
+    app.patch("/users/:email", async (req, res) => {
       const email = req.params.email;
-      const user = await usersCollection.findOne({ email });
-      res.send(user);
+      const updatedData = req.body;
+
+      const result = await usersCollection.updateOne(
+        { email },
+        { $set: updatedData }
+      );
+
+      res.send(result);
     });
   } finally {
   }
