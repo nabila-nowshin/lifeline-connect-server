@@ -19,14 +19,15 @@ const client = new MongoClient(uri, {
 });
 async function run() {
   try {
-    // await client.connect();
-    // await client.db("admin").command({ ping: 1 });
-    // console.log(
-    //   "Pinged your deployment. You successfully connected to MongoDB!"
-    // );
+    await client.connect();
+    await client.db("admin").command({ ping: 1 });
+    console.log(
+      "Pinged your deployment. You successfully connected to MongoDB!"
+    );
 
     const db = client.db("LifeLine_connect");
     const usersCollection = db.collection("users");
+    const donationRequestsCollection = db.collection("donation-requests");
 
     // ✅ POST /users: Add new user
     app.post("/users", async (req, res) => {
@@ -94,6 +95,33 @@ async function run() {
       } catch (error) {
         console.error("Update error:", error);
         res.status(500).send({ error: "Failed to update user" });
+      }
+    });
+
+    app.post("/donation-requests", async (req, res) => {
+      try {
+        const request = req.body;
+        console.log("request", request);
+
+        // Basic validation (optional)
+        if (
+          !request.requesterEmail ||
+          !request.bloodGroup ||
+          !request.donationDate
+        ) {
+          return res.status(400).json({ error: "Missing required fields." });
+        }
+
+        // Insert into your MongoDB collection
+        const result = await donationRequestsCollection.insertOne(request);
+
+        res.status(201).json({
+          message: "Donation request submitted successfully!",
+          insertedId: result.insertedId,
+        });
+      } catch (error) {
+        console.error("Error creating donation request:", error);
+        res.status(500).json({ error: "Failed to create donation request." });
       }
     });
   } finally {
