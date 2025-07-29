@@ -19,11 +19,11 @@ const client = new MongoClient(uri, {
 });
 async function run() {
   try {
-    await client.connect();
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.connect();
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
 
     const db = client.db("LifeLine_connect");
     const usersCollection = db.collection("users");
@@ -72,17 +72,29 @@ async function run() {
       }
     });
 
-    //patch operation on Users info
     app.patch("/users/:email", async (req, res) => {
       const email = req.params.email;
-      const updatedData = req.body;
+      const updatedData = { ...req.body };
 
-      const result = await usersCollection.updateOne(
-        { email },
-        { $set: updatedData }
-      );
+      // Remove _id if present to avoid MongoDB immutable field error
+      if (updatedData._id) {
+        delete updatedData._id;
+      }
 
-      res.send(result);
+      console.log("Updating user:", email);
+      console.log("With data:", updatedData);
+
+      try {
+        const result = await usersCollection.updateOne(
+          { email },
+          { $set: updatedData }
+        );
+
+        res.send(result);
+      } catch (error) {
+        console.error("Update error:", error);
+        res.status(500).send({ error: "Failed to update user" });
+      }
     });
   } finally {
   }
