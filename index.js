@@ -28,6 +28,7 @@ async function run() {
     const db = client.db("LifeLine_connect");
     const usersCollection = db.collection("users");
     const donationRequestsCollection = db.collection("donation-requests");
+    const blogsCollection = db.collection("blogs");
 
     // ✅ POST /users: Add new user
     app.post("/users", async (req, res) => {
@@ -320,6 +321,15 @@ async function run() {
         { $set: { role } }
       );
 
+      res.send(result);
+    });
+
+    // POST: Create a blog
+    app.post("/blogs", async (req, res) => {
+      const blog = req.body;
+      blog.status = "draft";
+      blog.createdAt = new Date();
+      const result = await blogsCollection.insertOne(blog);
       res.send(result);
     });
   } finally {
