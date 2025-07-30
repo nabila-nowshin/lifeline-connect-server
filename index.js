@@ -19,11 +19,11 @@ const client = new MongoClient(uri, {
 });
 async function run() {
   try {
-    // await client.connect();
-    // await client.db("admin").command({ ping: 1 });
-    // console.log(
-    //   "Pinged your deployment. You successfully connected to MongoDB!"
-    // );
+    await client.connect();
+    await client.db("admin").command({ ping: 1 });
+    console.log(
+      "Pinged your deployment. You successfully connected to MongoDB!"
+    );
 
     const db = client.db("LifeLine_connect");
     const usersCollection = db.collection("users");
@@ -280,6 +280,29 @@ async function run() {
       res.send({ users, total });
     });
 
+    // GET /users/search
+    app.get("/search-users", async (req, res) => {
+      try {
+        const { bloodGroup, district, upazila } = req.query;
+
+        const query = {
+          role: "donor",
+          status: "active",
+        };
+
+        if (bloodGroup) query.bloodGroup = bloodGroup;
+        if (district) query.district = district;
+        if (upazila) query.upazila = upazila;
+
+        const donors = await usersCollection.find(query).toArray();
+
+        res.status(200).json(donors);
+      } catch (error) {
+        console.error("Error fetching donors:", error);
+        res.status(500).json({ message: "Internal Server Error" });
+      }
+    });
+
     // 🔥 All donation requests with Pagination + Filtering
     app.get("/all-donations", async (req, res) => {
       const page = parseInt(req.query.page);
@@ -333,13 +356,73 @@ async function run() {
       res.send(result);
     });
 
-    // GET: Get all blogs
+    // GET /blogs?status=draft&skip=0&limit=6
     app.get("/blogs", async (req, res) => {
+      const { status, skip = 0, limit = 6 } = req.query;
+
+      const query = {};
+      if (status && status !== "all") {
+        query.status = status;
+      }
+
       const blogs = await blogsCollection
-        .find()
+        .find(query)
+        .skip(parseInt(skip))
+        .limit(parseInt(limit))
         .sort({ createdAt: -1 })
         .toArray();
-      res.send(blogs);
+
+      const total = await blogsCollection.countDocuments(query);
+
+      res.send({ blogs, total });
+    });
+
+    // PATCH: Publish or Unpublish a blog (admin only)
+    app.patch("/blogs/:id/status", async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { status } = req.body;
+
+        if (!["draft", "published"].includes(status)) {
+          return res.status(400).json({ message: "Invalid status value" });
+        }
+
+        const result = await blogsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { status } }
+        );
+
+        if (result.modifiedCount === 0) {
+          return res
+            .status(404)
+            .json({ message: "Blog not found or already has this status" });
+        }
+
+        res.json({ message: `Blog marked as ${status}` });
+      } catch (error) {
+        console.error("Error updating blog status:", error);
+        res.status(500).json({ message: "Internal server error" });
+      }
+    });
+
+    // DELETE: Delete a blog (admin only)
+    app.delete("/blogs/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+
+        const result = await blogsCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+
+        if (result.deletedCount === 0) {
+          return res.status(404).json({ message: "Blog not found" });
+        }
+
+        res.json({ message: "Blog deleted successfully" });
+      } catch (error) {
+        console.error("Error deleting blog:", error);
+        res.status(500).json({ message: "Internal server error" });
+      }
     });
   } finally {
   }
