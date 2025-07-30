@@ -19,11 +19,11 @@ const client = new MongoClient(uri, {
 });
 async function run() {
   try {
-    await client.connect();
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.connect();
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
 
     const db = client.db("LifeLine_connect");
     const usersCollection = db.collection("users");
@@ -140,7 +140,7 @@ async function run() {
     // });
 
     // Get paginated donation requests by a specific donor
-    app.get("/donation-requests/:email", async (req, res) => {
+    app.get("/donation-requests/by-email/:email", async (req, res) => {
       const email = req.params.email;
       console.log("email:", email);
       const skip = parseInt(req.query.skip) || 0;
@@ -184,7 +184,6 @@ async function run() {
     });
 
     // Get donation requests by a id
-    // Get donation request by ID
     app.get("/donation-requests/:id", async (req, res) => {
       const id = req.params.id;
 
@@ -244,6 +243,66 @@ async function run() {
         console.error("Delete error:", error);
         res.status(500).json({ error: "Failed to delete donation request" });
       }
+    });
+
+    // ADMIN
+    // Get all users count
+    app.get("/all-users-count", async (req, res) => {
+      const usersCount = await usersCollection.countDocuments();
+      res.send(usersCount);
+    });
+    // Get all donation count
+    app.get("/all-donation-count", async (req, res) => {
+      const donationCount = await donationRequestsCollection.countDocuments();
+      res.send(donationCount);
+    });
+
+    // 🔥 All Users with Pagination + Filtering
+    app.get("/all-users", async (req, res) => {
+      const status = req.query.status;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+
+      const query = {};
+      if (status && status !== "all") {
+        query.status = status;
+      }
+
+      const skip = (page - 1) * limit;
+      const users = await usersCollection
+        .find(query)
+        .skip(skip)
+        .limit(limit)
+        .toArray();
+      const total = await usersCollection.countDocuments(query);
+
+      res.send({ users, total });
+    });
+
+    // ✅ Update User Status (Block/Unblock)
+    app.patch("/users/:id/status", async (req, res) => {
+      const id = req.params.id;
+      const { status } = req.body;
+
+      const result = await usersCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { status } }
+      );
+
+      res.send(result);
+    });
+
+    // ✅ Update User Role (Make Admin/Volunteer)
+    app.patch("/users/:id/role", async (req, res) => {
+      const id = req.params.id;
+      const { role } = req.body;
+
+      const result = await usersCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { role } }
+      );
+
+      res.send(result);
     });
   } finally {
   }
