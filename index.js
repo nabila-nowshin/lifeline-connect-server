@@ -124,17 +124,43 @@ async function run() {
     });
 
     // Get all donation requests by a specific donor
+    // app.get("/donation-requests/:email", async (req, res) => {
+    //   const email = req.params.email;
+    //   console.log("hello");
+    //   try {
+    //     const recentRequests = await donationRequestsCollection
+    //       .find({ requesterEmail: email })
+    //       .toArray();
+
+    //     res.json(recentRequests);
+    //   } catch (error) {
+    //     console.error("Error fetching recent donation requests:", error);
+    //     res.status(500).json({ error: "Internal Server Error" });
+    //   }
+    // });
+
+    // Get paginated donation requests by a specific donor
     app.get("/donation-requests/:email", async (req, res) => {
       const email = req.params.email;
+      console.log("email:", email);
+      const skip = parseInt(req.query.skip) || 0;
+      const limit = parseInt(req.query.limit) || 5;
 
       try {
+        const query = { requesterEmail: email };
+
+        const total = await donationRequestsCollection.countDocuments(query);
+
         const recentRequests = await donationRequestsCollection
-          .find({ requesterEmail: email })
+          .find(query)
+          .skip(skip)
+          .limit(limit)
+          .sort({ donationDate: -1 }) // Optional: sort newest first
           .toArray();
 
-        res.json(recentRequests);
+        res.json({ requests: recentRequests, total });
       } catch (error) {
-        console.error("Error fetching recent donation requests:", error);
+        console.error("Error fetching paginated donation requests:", error);
         res.status(500).json({ error: "Internal Server Error" });
       }
     });
@@ -142,7 +168,7 @@ async function run() {
     // Get 3 recent donation requests by a specific donor
     app.get("/donation-requests/recent/:email", async (req, res) => {
       const email = req.params.email;
-
+      console.log("email:", email);
       try {
         const recentRequests = await donationRequestsCollection
           .find({ requesterEmail: email })
