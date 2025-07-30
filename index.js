@@ -279,6 +279,24 @@ async function run() {
       res.send({ users, total });
     });
 
+    // 🔥 All donation requests with Pagination + Filtering
+    app.get("/all-donations", async (req, res) => {
+      const page = parseInt(req.query.page);
+      const limit = parseInt(req.query.limit);
+      console.log(page, limit);
+
+      const query = {};
+
+      const skip = (page - 1) * limit;
+      const donations = await donationRequestsCollection
+        .find(query)
+        .skip(skip)
+        .limit(limit)
+        .toArray();
+      const total = await donationRequestsCollection.countDocuments(query);
+
+      res.send({ donations, total });
+    });
     // ✅ Update User Status (Block/Unblock)
     app.patch("/users/:id/status", async (req, res) => {
       const id = req.params.id;
