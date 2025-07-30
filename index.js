@@ -332,6 +332,15 @@ async function run() {
       const result = await blogsCollection.insertOne(blog);
       res.send(result);
     });
+
+    // GET: Get all blogs
+    app.get("/blogs", async (req, res) => {
+      const blogs = await blogsCollection
+        .find()
+        .sort({ createdAt: -1 })
+        .toArray();
+      res.send(blogs);
+    });
   } finally {
   }
 }
