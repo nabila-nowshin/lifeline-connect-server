@@ -321,6 +321,43 @@ async function run() {
 
       res.send({ donations, total });
     });
+
+    //public :pending donation requests
+    app.get("/pending-donations", async (req, res) => {
+      const page = parseInt(req.query.page);
+      const limit = parseInt(req.query.limit);
+
+      const query = { status: "pending" };
+
+      const skip = (page - 1) * limit;
+
+      const pendingDonations = await donationRequestsCollection
+        .find(query)
+        .skip(skip)
+        .limit(limit)
+        .toArray();
+
+      const total = await donationRequestsCollection.countDocuments(query);
+
+      res.send({ donations: pendingDonations, total });
+    });
+
+    //update donation status
+    app.patch("/donations/update-status/:id", async (req, res) => {
+      const id = req.params.id;
+      const newStatus = req.body.status;
+
+      try {
+        const result = await donationRequestsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { status: newStatus } }
+        );
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ error: "Failed to update status" });
+      }
+    });
+
     // ✅ Update User Status (Block/Unblock)
     app.patch("/users/:id/status", async (req, res) => {
       const id = req.params.id;
