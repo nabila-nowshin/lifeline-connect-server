@@ -1,4 +1,5 @@
 require("dotenv").config();
+const admin = require("firebase-admin");
 const express = require("express");
 const app = express();
 const port = process.env.PORT || 3000;
@@ -6,6 +7,30 @@ const cors = require("cors");
 
 app.use(cors());
 app.use(express.json());
+// const verifyToken = async (req, res, next) => {
+//   const authHeader = req.headers.authorization;
+
+//   if (!authHeader || !authHeader?.startsWith("Bearer ")) {
+//     return res.status(401).send({ error: "Unauthorized access No token" });
+//   }
+
+//   const token = authHeader.split(" ")[1];
+
+//   try {
+//     const decoded = await admin.auth().verifyIdToken(token);
+//     req.decoded = decoded;
+//     // console.log(token, decoded);
+//     next();
+//   } catch (err) {
+//     return res.status(403).send({ error: "Invalid token" });
+//   }
+// };
+
+// const serviceAccount = require("./path/your-service-account.json");
+
+// admin.initializeApp({
+//   credential: admin.credential.cert(serviceAccount),
+// });
 
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@tiptopgardeners.3nfx9jd.mongodb.net/?retryWrites=true&w=majority&appName=TipTopGardeners`;
@@ -121,48 +146,6 @@ async function run() {
       } catch (error) {
         console.error("Error creating donation request:", error);
         res.status(500).json({ error: "Failed to create donation request." });
-      }
-    });
-
-    // Get all donation requests by a specific donor
-    // app.get("/donation-requests/:email", async (req, res) => {
-    //   const email = req.params.email;
-    //   console.log("hello");
-    //   try {
-    //     const recentRequests = await donationRequestsCollection
-    //       .find({ requesterEmail: email })
-    //       .toArray();
-
-    //     res.json(recentRequests);
-    //   } catch (error) {
-    //     console.error("Error fetching recent donation requests:", error);
-    //     res.status(500).json({ error: "Internal Server Error" });
-    //   }
-    // });
-
-    // Get paginated donation requests by a specific donor
-    app.get("/donation-requests/by-email/:email", async (req, res) => {
-      const email = req.params.email;
-      console.log("email:", email);
-      const skip = parseInt(req.query.skip) || 0;
-      const limit = parseInt(req.query.limit) || 5;
-
-      try {
-        const query = { requesterEmail: email };
-
-        const total = await donationRequestsCollection.countDocuments(query);
-
-        const recentRequests = await donationRequestsCollection
-          .find(query)
-          .skip(skip)
-          .limit(limit)
-          .sort({ donationDate: -1 }) // Optional: sort newest first
-          .toArray();
-
-        res.json({ requests: recentRequests, total });
-      } catch (error) {
-        console.error("Error fetching paginated donation requests:", error);
-        res.status(500).json({ error: "Internal Server Error" });
       }
     });
 
@@ -305,18 +288,36 @@ async function run() {
 
     // 🔥 All donation requests with Pagination + Filtering
     app.get("/all-donations", async (req, res) => {
-      const page = parseInt(req.query.page);
-      const limit = parseInt(req.query.limit);
-      console.log(page, limit);
-
-      const query = {};
+      // console.log(req.query);
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 3;
+      const role = req.query.role;
+      const email = req.query.email;
+      const status = req.query.status;
+      // const role = req.user.role;
+      // const email = req.user?.email;
 
       const skip = (page - 1) * limit;
+
+      // Default: everyone sees only their own donations
+      let query = { requesterEmail: email };
+
+      // Admins can see all
+      if (role === "admin" || "volunteer") {
+        query = {};
+      }
+
+      if (status && status !== "all") {
+        query.status = status;
+      }
+
       const donations = await donationRequestsCollection
         .find(query)
+        .sort({ donationDate: -1 })
         .skip(skip)
         .limit(limit)
         .toArray();
+
       const total = await donationRequestsCollection.countDocuments(query);
 
       res.send({ donations, total });
@@ -344,17 +345,27 @@ async function run() {
 
     //update donation status
     app.patch("/donations/update-status/:id", async (req, res) => {
-      const id = req.params.id;
-      const newStatus = req.body.status;
+      const { id } = req.params;
+      const { status, donorName, donorEmail } = req.body;
 
       try {
+        const updateFields = { status };
+        if (donorName) updateFields.donorName = donorName;
+        if (donorEmail) updateFields.donorEmail = donorEmail;
+
         const result = await donationRequestsCollection.updateOne(
           { _id: new ObjectId(id) },
-          { $set: { status: newStatus } }
+          { $set: updateFields }
         );
-        res.send(result);
+
+        if (result.matchedCount === 0) {
+          return res.status(404).json({ message: "Request not found" });
+        }
+
+        res.json({ modifiedCount: result.modifiedCount });
       } catch (error) {
-        res.status(500).send({ error: "Failed to update status" });
+        console.error("Update error:", error);
+        res.status(500).json({ error: "Failed to update donation request" });
       }
     });
 
@@ -393,7 +404,45 @@ async function run() {
       res.send(result);
     });
 
-    // GET /blogs?status=draft&skip=0&limit=6
+    // Get all published blogs (public endpoint)
+    app.get("/published-blogs", async (req, res) => {
+      try {
+        const publishedBlogs = await blogsCollection
+          .find({ status: "published" })
+          .sort({ createdAt: -1 }) // newest first
+          .toArray();
+
+        res.send(publishedBlogs);
+      } catch (error) {
+        console.error("Error fetching published blogs:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+
+    // Get a single blog by ID
+    app.get("/published-blogs/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+
+        const blog = await blogsCollection.findOne({
+          _id: new ObjectId(id),
+          status: "published",
+        });
+
+        if (!blog) {
+          return res
+            .status(404)
+            .send({ message: "Blog not found or unpublished" });
+        }
+
+        res.send(blog);
+      } catch (error) {
+        console.error("Error fetching single blog:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+
+    // GET /blogs?status=draft&skip=0&limit=6 (admin,volunteer)
     app.get("/blogs", async (req, res) => {
       const { status, skip = 0, limit = 6 } = req.query;
 
