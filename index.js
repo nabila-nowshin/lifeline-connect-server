@@ -7,30 +7,31 @@ const cors = require("cors");
 
 app.use(cors());
 app.use(express.json());
-// const verifyToken = async (req, res, next) => {
-//   const authHeader = req.headers.authorization;
+const verifyToken = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
 
-//   if (!authHeader || !authHeader?.startsWith("Bearer ")) {
-//     return res.status(401).send({ error: "Unauthorized access No token" });
-//   }
+  if (!authHeader || !authHeader?.startsWith("Bearer ")) {
+    return res.status(401).send({ error: "Unauthorized access No token" });
+  }
 
-//   const token = authHeader.split(" ")[1];
+  const token = authHeader.split(" ")[1];
 
-//   try {
-//     const decoded = await admin.auth().verifyIdToken(token);
-//     req.decoded = decoded;
-//     // console.log(token, decoded);
-//     next();
-//   } catch (err) {
-//     return res.status(403).send({ error: "Invalid token" });
-//   }
-// };
+  try {
+    const decoded = await admin.auth().verifyIdToken(token);
+    req.decoded = decoded;
+    // console.log(token, decoded);
+    // console.log(req.decoded.email);
+    next();
+  } catch (err) {
+    return res.status(403).send({ error: "Invalid token" });
+  }
+};
 
-// const serviceAccount = require("./path/your-service-account.json");
+const serviceAccount = require("./path/your-service-account.json");
 
-// admin.initializeApp({
-//   credential: admin.credential.cert(serviceAccount),
-// });
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@tiptopgardeners.3nfx9jd.mongodb.net/?retryWrites=true&w=majority&appName=TipTopGardeners`;
@@ -55,7 +56,28 @@ async function run() {
     const donationRequestsCollection = db.collection("donation-requests");
     const blogsCollection = db.collection("blogs");
 
-    // ✅ POST /users: Add new user
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+      // console.log("decoded Email", req.decoded);
+      const user = await usersCollection.findOne({ email });
+      if (user?.role !== "admin") {
+        return res.status(403).send({ error: "Forbidden" });
+      }
+      next();
+    };
+
+    const verifyAdminOrVolunteer = async (req, res, next) => {
+      const email = req.decoded.email;
+      const user = await usersCollection.findOne({ email });
+
+      if (user?.role !== "admin" && user?.role !== "volunteer") {
+        return res.status(403).send({ error: "Forbidden" });
+      }
+
+      next();
+    };
+
+    // users: Add new user
     app.post("/users", async (req, res) => {
       try {
         const userData = req.body;
@@ -80,14 +102,14 @@ async function run() {
     });
 
     //GET users role
-    app.get("/users/role/:email", async (req, res) => {
+    app.get("/users/role/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
       const user = await usersCollection.findOne({ email });
       res.send({ role: user?.role || "user" });
     });
 
     //get users by email
-    app.get("/users/:email", async (req, res) => {
+    app.get("/users/:email", verifyToken, async (req, res) => {
       try {
         const email = req.params.email;
         const user = await usersCollection.findOne({ email });
@@ -99,7 +121,7 @@ async function run() {
       }
     });
 
-    app.patch("/users/:email", async (req, res) => {
+    app.patch("/users/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
       const updatedData = { ...req.body };
 
@@ -122,10 +144,10 @@ async function run() {
     });
 
     // DONATION REQUESTS
-    app.post("/donation-requests", async (req, res) => {
+    app.post("/donation-requests", verifyToken, async (req, res) => {
       try {
         const request = req.body;
-        console.log("request", request);
+        // console.log("request", request);
 
         // Basic validation (optional)
         if (
@@ -150,25 +172,29 @@ async function run() {
     });
 
     // Get 3 recent donation requests by a specific donor
-    app.get("/donation-requests/recent/:email", async (req, res) => {
-      const email = req.params.email;
-      console.log("email:", email);
-      try {
-        const recentRequests = await donationRequestsCollection
-          .find({ requesterEmail: email })
-          .sort({ donationDate: -1 }) // newest first
-          .limit(3)
-          .toArray();
+    app.get(
+      "/donation-requests/recent/:email",
+      verifyToken,
+      async (req, res) => {
+        const email = req.params.email;
+        // console.log("email:", email);
+        try {
+          const recentRequests = await donationRequestsCollection
+            .find({ requesterEmail: email })
+            .sort({ donationDate: -1 }) // newest first
+            .limit(3)
+            .toArray();
 
-        res.json(recentRequests);
-      } catch (error) {
-        console.error("Error fetching recent donation requests:", error);
-        res.status(500).json({ error: "Internal Server Error" });
+          res.json(recentRequests);
+        } catch (error) {
+          console.error("Error fetching recent donation requests:", error);
+          res.status(500).json({ error: "Internal Server Error" });
+        }
       }
-    });
+    );
 
     // Get donation requests by a id
-    app.get("/donation-requests/:id", async (req, res) => {
+    app.get("/donation-requests/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
 
       try {
@@ -188,7 +214,7 @@ async function run() {
     });
 
     // Update donation request by ID (PATCH)
-    app.patch("/donation-requests/:id", async (req, res) => {
+    app.patch("/donation-requests/:id", verifyToken, async (req, res) => {
       const { id } = req.params;
       const updatedData = req.body; // recipientName, donationDate, donationTime, bloodGroup
 
@@ -210,7 +236,7 @@ async function run() {
     });
 
     // Delete donation request by ID (DELETE)
-    app.delete("/donation-requests/:id", async (req, res) => {
+    app.delete("/donation-requests/:id", verifyToken, async (req, res) => {
       const { id } = req.params;
 
       try {
@@ -231,39 +257,55 @@ async function run() {
 
     // ADMIN
     // Get all users count
-    app.get("/all-users-count", async (req, res) => {
-      const usersCount = await usersCollection.countDocuments();
-      res.send(usersCount);
-    });
+    app.get(
+      "/all-users-count",
+      verifyToken,
+      verifyAdminOrVolunteer,
+      async (req, res) => {
+        // console.log(req.headers);
+        const usersCount = await usersCollection.countDocuments();
+        res.send(usersCount);
+      }
+    );
     // Get all donation count
-    app.get("/all-donation-count", async (req, res) => {
-      const donationCount = await donationRequestsCollection.countDocuments();
-      res.send(donationCount);
-    });
+    app.get(
+      "/all-donation-count",
+      verifyToken,
+      verifyAdminOrVolunteer,
+      async (req, res) => {
+        const donationCount = await donationRequestsCollection.countDocuments();
+        res.send(donationCount);
+      }
+    );
 
     // 🔥 All Users with Pagination + Filtering
-    app.get("/all-users", async (req, res) => {
-      const status = req.query.status;
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
+    app.get(
+      "/all-users",
+      verifyToken,
+      verifyAdminOrVolunteer,
+      async (req, res) => {
+        const status = req.query.status;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
 
-      const query = {};
-      if (status && status !== "all") {
-        query.status = status;
+        const query = {};
+        if (status && status !== "all") {
+          query.status = status;
+        }
+
+        const skip = (page - 1) * limit;
+        const users = await usersCollection
+          .find(query)
+          .skip(skip)
+          .limit(limit)
+          .toArray();
+        const total = await usersCollection.countDocuments(query);
+
+        res.send({ users, total });
       }
+    );
 
-      const skip = (page - 1) * limit;
-      const users = await usersCollection
-        .find(query)
-        .skip(skip)
-        .limit(limit)
-        .toArray();
-      const total = await usersCollection.countDocuments(query);
-
-      res.send({ users, total });
-    });
-
-    // GET /users/search
+    // GET /users/search :public
     app.get("/search-users", async (req, res) => {
       try {
         const { bloodGroup, district, upazila } = req.query;
@@ -287,7 +329,7 @@ async function run() {
     });
 
     // 🔥 All donation requests with Pagination + Filtering
-    app.get("/all-donations", async (req, res) => {
+    app.get("/all-donations", verifyToken, async (req, res) => {
       // console.log(req.query);
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 3;
@@ -303,7 +345,7 @@ async function run() {
       let query = { requesterEmail: email };
 
       // Admins can see all
-      if (role === "admin" || "volunteer") {
+      if (role === "admin" || role === "volunteer") {
         query = {};
       }
 
@@ -344,7 +386,7 @@ async function run() {
     });
 
     //update donation status
-    app.patch("/donations/update-status/:id", async (req, res) => {
+    app.patch("/donations/update-status/:id", verifyToken, async (req, res) => {
       const { id } = req.params;
       const { status, donorName, donorEmail } = req.body;
 
@@ -370,7 +412,7 @@ async function run() {
     });
 
     // ✅ Update User Status (Block/Unblock)
-    app.patch("/users/:id/status", async (req, res) => {
+    app.patch("/users/:id/status", verifyToken, async (req, res) => {
       const id = req.params.id;
       const { status } = req.body;
 
@@ -383,7 +425,7 @@ async function run() {
     });
 
     // ✅ Update User Role (Make Admin/Volunteer)
-    app.patch("/users/:id/role", async (req, res) => {
+    app.patch("/users/:id/role", verifyToken, async (req, res) => {
       const id = req.params.id;
       const { role } = req.body;
 
@@ -396,13 +438,18 @@ async function run() {
     });
 
     // POST: Create a blog
-    app.post("/blogs", async (req, res) => {
-      const blog = req.body;
-      blog.status = "draft";
-      blog.createdAt = new Date();
-      const result = await blogsCollection.insertOne(blog);
-      res.send(result);
-    });
+    app.post(
+      "/blogs",
+      verifyToken,
+      verifyAdminOrVolunteer,
+      async (req, res) => {
+        const blog = req.body;
+        blog.status = "draft";
+        blog.createdAt = new Date();
+        const result = await blogsCollection.insertOne(blog);
+        res.send(result);
+      }
+    );
 
     // Get all published blogs (public endpoint)
     app.get("/published-blogs", async (req, res) => {
@@ -419,7 +466,7 @@ async function run() {
       }
     });
 
-    // Get a single blog by ID
+    // Get a single blog by ID (public)
     app.get("/published-blogs/:id", async (req, res) => {
       try {
         const id = req.params.id;
@@ -442,8 +489,8 @@ async function run() {
       }
     });
 
-    // GET /blogs?status=draft&skip=0&limit=6 (admin,volunteer)
-    app.get("/blogs", async (req, res) => {
+    // GET /blogs?status=draft&skip=0&limit=6
+    app.get("/blogs", verifyToken, async (req, res) => {
       const { status, skip = 0, limit = 6 } = req.query;
 
       const query = {};
@@ -464,35 +511,40 @@ async function run() {
     });
 
     // PATCH: Publish or Unpublish a blog (admin only)
-    app.patch("/blogs/:id/status", async (req, res) => {
-      try {
-        const { id } = req.params;
-        const { status } = req.body;
+    app.patch(
+      "/blogs/:id/status",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const { id } = req.params;
+          const { status } = req.body;
 
-        if (!["draft", "published"].includes(status)) {
-          return res.status(400).json({ message: "Invalid status value" });
+          if (!["draft", "published"].includes(status)) {
+            return res.status(400).json({ message: "Invalid status value" });
+          }
+
+          const result = await blogsCollection.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { status } }
+          );
+
+          if (result.modifiedCount === 0) {
+            return res
+              .status(404)
+              .json({ message: "Blog not found or already has this status" });
+          }
+
+          res.json({ message: `Blog marked as ${status}` });
+        } catch (error) {
+          console.error("Error updating blog status:", error);
+          res.status(500).json({ message: "Internal server error" });
         }
-
-        const result = await blogsCollection.updateOne(
-          { _id: new ObjectId(id) },
-          { $set: { status } }
-        );
-
-        if (result.modifiedCount === 0) {
-          return res
-            .status(404)
-            .json({ message: "Blog not found or already has this status" });
-        }
-
-        res.json({ message: `Blog marked as ${status}` });
-      } catch (error) {
-        console.error("Error updating blog status:", error);
-        res.status(500).json({ message: "Internal server error" });
       }
-    });
+    );
 
     // DELETE: Delete a blog (admin only)
-    app.delete("/blogs/:id", async (req, res) => {
+    app.delete("/blogs/:id", verifyToken, verifyAdmin, async (req, res) => {
       try {
         const { id } = req.params;
 
